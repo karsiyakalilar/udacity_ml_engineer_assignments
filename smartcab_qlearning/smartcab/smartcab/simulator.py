@@ -121,7 +121,7 @@ class Simulator(object):
         # Get the primary agent
         a = self.env.primary_agent
 
-        total_trials = 1
+        self.total_trials = 1
         testing = False
         trial = 1
 
@@ -129,7 +129,7 @@ class Simulator(object):
 
             # Flip testing switch
             if not testing:
-                if total_trials > 20: # Must complete minimum 20 training trials
+                if self.total_trials > 20: # Must complete minimum 20 training trials
                     if a.learning:
                         if a.epsilon < tolerance: # assumes epsilon decays to 0
                             testing = True
@@ -221,7 +221,7 @@ class Simulator(object):
                 print "Agent did not reach the destination."
 
             # Increment
-            total_trials = total_trials + 1
+            self.total_trials = self.total_trials + 1
             trial = trial + 1
 
         # Clean up

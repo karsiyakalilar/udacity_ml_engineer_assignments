@@ -24,7 +24,7 @@ class LearningAgent(Agent):
         ## TO DO ##
         ###########
         # Set any additional class parameters as needed
-
+        self.trial_count = 0
 
     def reset(self, destination=None, testing=True):
         """ The reset function is called at the beginning of each trial.
@@ -33,7 +33,7 @@ class LearningAgent(Agent):
 
         # Select the destination as the new location to route to
         self.planner.route_to(destination)
-        
+        self.trial_count += 1
         ########### 
         ## TO DO ##
         ###########
@@ -44,13 +44,15 @@ class LearningAgent(Agent):
             self.epsilon, self.alpha = (0,0)
             return None
 
-        # def decay_func(epsilon, increment=.2):
-        #     return epsilon * (1 - increment)
-
-        
-
+        def decay_func(epsilon, increment=.2):
+            return epsilon * (1 - increment)
         self.epsilon = decay_func(self.epsilon)
+        # print("######## self.epsilon: %s" % self.epsilon)
 
+        # a non linear delay func
+        # def decay_func(t):
+        #     return 1 if t == 0 else (1.0 / t**2)
+        # self.epsilon = decay_func(self.trial_count)
         return None
 
     
@@ -167,7 +169,7 @@ class LearningAgent(Agent):
         ###########
         # When learning, implement the value iteration update rule
         #   Use only the learning rate 'alpha' (do not use the discount factor 'gamma')
-
+        self.Q[state][action] += reward * self.alpha
         return
 
 
@@ -203,7 +205,7 @@ def run():
     #   learning   - set to True to force the driving agent to use Q-learning
     #    * epsilon - continuous value for the exploration factor, default is 1
     #    * alpha   - continuous value for the learning rate, default is 0.5
-    agent = env.create_agent(LearningAgent, learning=True)
+    agent = env.create_agent(LearningAgent, learning=True, alpha=.5)
     
     ##############
     # Follow the driving agent
@@ -218,7 +220,7 @@ def run():
     #   display      - set to False to disable the GUI if PyGame is enabled
     #   log_metrics  - set to True to log trial and simulation results to /logs
     #   optimized    - set to True to change the default log file name
-    sim = Simulator(env, display=True, log_metrics=True, update_delay=.01)
+    sim = Simulator(env, display=True, log_metrics=True, update_delay=.01, optimized=True)
     
     ##############
     # Run the simulator
