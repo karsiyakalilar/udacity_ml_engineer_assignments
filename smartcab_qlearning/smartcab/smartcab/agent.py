@@ -1,5 +1,6 @@
 import random
 import math
+import numpy as np
 from environment import Agent, Environment
 from planner import RoutePlanner
 from simulator import Simulator
@@ -25,7 +26,7 @@ class LearningAgent(Agent):
         # Set any additional class parameters as needed
 
 
-    def reset(self, destination=None, testing=False):
+    def reset(self, destination=None, testing=True):
         """ The reset function is called at the beginning of each trial.
             'testing' is set to True if testing trials are being used
             once training trials have completed. """
@@ -39,9 +40,20 @@ class LearningAgent(Agent):
         # Update epsilon using a decay function of your choice
         # Update additional class parameters as needed
         # If 'testing' is True, set epsilon and alpha to 0
+        if testing is True:
+            self.epsilon, self.alpha = (0,0)
+            return None
+
+        # def decay_func(epsilon, increment=.2):
+        #     return epsilon * (1 - increment)
+
+        
+
+        self.epsilon = decay_func(self.epsilon)
 
         return None
 
+    
     def build_state(self):
         """ The build_state function is called when the agent requests data from the 
             environment. The next waypoint, the intersection inputs, and the deadline 
@@ -56,7 +68,20 @@ class LearningAgent(Agent):
         ## TO DO ##
         ###########
         # Set 'state' as a tuple of relevant data for the agent        
-        state = None
+        light = inputs['light']
+        oncoming = inputs['oncoming']
+        right = inputs['right']
+        left = inputs['left']
+
+        # based on the discussion on Q4 disregardign deadline
+        # again based on the discussion potentially a should_rush dimension can be reduced from the continuous variable deadline
+        # but won't be using it for now
+        # should_rush = deadline < 10
+        
+        state = (waypoint, light, oncoming, right, left)
+
+        # print("##### THIS IS THE STATE #####")
+        # print(state)
 
         return state
 
@@ -69,9 +94,10 @@ class LearningAgent(Agent):
         ## TO DO ##
         ###########
         # Calculate the maximum Q-value of all actions for a given state
-
-        maxQ = None
-
+        if state in self.Q.keys():
+            maxQ = max(self.Q[state].values())
+        else:
+            maxQ = 0
         return maxQ 
 
 
@@ -85,9 +111,23 @@ class LearningAgent(Agent):
         # If it is not, create a new dictionary for that state
         #   Then, for each action available, set the initial Q-value to 0.0
 
+        if state not in self.Q.keys():
+            # generate 0s for all available actions since we don't know which action is best
+            self.Q[state] = dict(zip(self.valid_actions, [0]*len(self.valid_actions)))
+
         return
 
+    def get_action_per_state_per_reward(self, state, max_reward):
+        valid_actions = self.Q[state]
+        best_actions = [act for act, rew in valid_actions.items() if rew == max_reward]
+        if len(best_actions) > 1:
+            return random.choice(best_actions)
+        else:
+            return best_actions[0]
 
+    def get_random_action(self):
+        return random.choice(self.valid_actions)
+    
     def choose_action(self, state):
         """ The choose_action function is called when the agent is asked to choose
             which action to take, based on the 'state' the smartcab is in. """
@@ -95,15 +135,25 @@ class LearningAgent(Agent):
         # Set the agent state and default action
         self.state = state
         self.next_waypoint = self.planner.next_waypoint()
-        action = random.choice(self.valid_actions)
+        max_q = self.get_maxQ(state)
 
         ########### 
         ## TO DO ##
         ###########
         # When not learning, choose a random action
-        # When learning, choose a random action with 'epsilon' probability
-        #   Otherwise, choose an action with the highest Q-value for the current state
- 
+        if not self.learning:
+            action = self.get_random_action()
+        else:
+            if self.epsilon > 0.05:
+            # When learning, choose a random action with 'epsilon' probability
+                if self.epsilon > random.random():
+                    action = self.get_random_action()
+                else:
+                    action = self.get_action_per_state_per_reward(state, max_q)
+            else:
+            # Otherwise, choose an action with the highest Q-value for the current state
+                action = self.get_action_per_state_per_reward(state, max_q)
+
         return action
 
 
@@ -168,7 +218,7 @@ def run():
     #   display      - set to False to disable the GUI if PyGame is enabled
     #   log_metrics  - set to True to log trial and simulation results to /logs
     #   optimized    - set to True to change the default log file name
-    sim = Simulator(env, display=True, log_metrics=True, update_delay=.02)
+    sim = Simulator(env, display=True, log_metrics=True, update_delay=.01)
     
     ##############
     # Run the simulator
