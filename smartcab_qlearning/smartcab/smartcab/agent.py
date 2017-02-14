@@ -1,6 +1,5 @@
 import random
 import math
-import numpy as np
 from environment import Agent, Environment
 from planner import RoutePlanner
 from simulator import Simulator
@@ -25,37 +24,46 @@ class LearningAgent(Agent):
         ###########
         # Set any additional class parameters as needed
         self.trial_count = 0
+        self.post_plateu_decay = 0
 
-    def reset(self, destination=None, testing=True):
+
+    def reset(self, destination=None, testing=False):
         """ The reset function is called at the beginning of each trial.
             'testing' is set to True if testing trials are being used
             once training trials have completed. """
 
         # Select the destination as the new location to route to
         self.planner.route_to(destination)
-        self.trial_count += 1
+        
         ########### 
         ## TO DO ##
         ###########
         # Update epsilon using a decay function of your choice
         # Update additional class parameters as needed
         # If 'testing' is True, set epsilon and alpha to 0
+
         if testing is True:
-            self.epsilon, self.alpha = (0,0)
+            self.epsilon, self.alpha = (0.0, 0.0)
             return None
 
-        def decay_func(epsilon, increment=.2):
-            return epsilon * (1 - increment)
-        self.epsilon = decay_func(self.epsilon)
-        # print("######## self.epsilon: %s" % self.epsilon)
+        # - linear decay function
+        # def linear_decay_func(epsilon, increment=0.05):
+        #     return epsilon - increment
+        # decay_val = .05
+        # self.epsilon = self.epsilon - decay_val
 
-        # a non linear delay func
-        # def decay_func(t):
-        #     return 1 if t == 0 else (1.0 / t**2)
-        # self.epsilon = decay_func(self.trial_count)
+        # - non-linear decay function
+
+        self.trial_count += 1
+        # self.epsilon = 1 / float((self.trial_count ** 2))
+
+        # _ decay epsilon after 100 trials of 1.0
+        if self.trial_count > 100:
+            self.post_plateu_decay += 1
+            self.epsilon = 1 / float((self.post_plateu_decay ** 2))
+
         return None
 
-    
     def build_state(self):
         """ The build_state function is called when the agent requests data from the 
             environment. The next waypoint, the intersection inputs, and the deadline 
@@ -70,26 +78,22 @@ class LearningAgent(Agent):
         ## TO DO ##
         ###########
         # Set 'state' as a tuple of relevant data for the agent        
-        light = inputs['light']
-        oncoming = inputs['oncoming']
-        right = inputs['right']
-        left = inputs['left']
 
-        # based on the discussion on Q4 disregardign deadline
-        # again based on the discussion potentially a should_rush dimension can be reduced from the continuous variable deadline
-        # but won't be using it for now
-        # should_rush = deadline < 10
-        
-        state = (waypoint, light, oncoming, right, left)
+        # - define deadline as True, False
+        # deadline_reduced = True if deadline < 5 else False
 
-        # print("##### THIS IS THE STATE #####")
-        # print(state)
+        # - use left, right, oncoming and light for features
+        left = inputs["left"]
+        right = inputs["right"]
+        oncoming = inputs["oncoming"]
+        light = inputs["light"]
 
+        state = (waypoint, light, left, oncoming)
         return state
 
 
     def get_maxQ(self, state):
-        """ The get_max_Q function is called when the agent is asked to find the
+        """ The get_maxQ function is called when the agent is asked to find the
             maximum Q-value of all actions based on the 'state' the smartcab is in. """
 
         ########### 
@@ -99,7 +103,7 @@ class LearningAgent(Agent):
         if state in self.Q.keys():
             maxQ = max(self.Q[state].values())
         else:
-            maxQ = 0
+            maxQ = 0.0
         return maxQ 
 
 
@@ -113,23 +117,21 @@ class LearningAgent(Agent):
         # If it is not, create a new dictionary for that state
         #   Then, for each action available, set the initial Q-value to 0.0
 
-        if state not in self.Q.keys():
-            # generate 0s for all available actions since we don't know which action is best
-            self.Q[state] = dict(zip(self.valid_actions, [0]*len(self.valid_actions)))
+        if self.learning is True:
+            if state not in self.Q:
+                # generate 0s for all available actions since we don't know which action is best
+                self.Q[state] = dict(zip(self.valid_actions, [0.0] * len(self.valid_actions)))
 
         return
 
     def get_action_per_state_per_reward(self, state, max_reward):
         valid_actions = self.Q[state]
         best_actions = [act for act, rew in valid_actions.items() if rew == max_reward]
-        if len(best_actions) > 1:
-            return random.choice(best_actions)
-        else:
-            return best_actions[0]
+        return random.choice(best_actions)
 
     def get_random_action(self):
         return random.choice(self.valid_actions)
-    
+
     def choose_action(self, state):
         """ The choose_action function is called when the agent is asked to choose
             which action to take, based on the 'state' the smartcab is in. """
@@ -137,24 +139,29 @@ class LearningAgent(Agent):
         # Set the agent state and default action
         self.state = state
         self.next_waypoint = self.planner.next_waypoint()
-        max_q = self.get_maxQ(state)
+
+        # - getting the best reward and action for the given state and
+        max_q = self.get_maxQ(self.state)
+        best_action = self.get_action_per_state_per_reward(self.state, max_q)
 
         ########### 
         ## TO DO ##
         ###########
         # When not learning, choose a random action
+        # When learning, choose a random action with 'epsilon' probability
+        #   Otherwise, choose an action with the highest Q-value for the current state
+        
+        # - first iteration of the agent where it make a random choice everytime
+        # action = self.get_random_action()
+
+        # - second iteration where the agent will get the best action
         if not self.learning:
             action = self.get_random_action()
         else:
-            if self.epsilon > 0.05:
-            # When learning, choose a random action with 'epsilon' probability
-                if self.epsilon > random.random():
-                    action = self.get_random_action()
-                else:
-                    action = self.get_action_per_state_per_reward(state, max_q)
+            if self.epsilon > random.random():
+                action = self.get_random_action()
             else:
-            # Otherwise, choose an action with the highest Q-value for the current state
-                action = self.get_action_per_state_per_reward(state, max_q)
+                action = best_action
 
         return action
 
@@ -169,7 +176,9 @@ class LearningAgent(Agent):
         ###########
         # When learning, implement the value iteration update rule
         #   Use only the learning rate 'alpha' (do not use the discount factor 'gamma')
-        self.Q[state][action] += reward * self.alpha
+        if self.learning is True:
+            self.Q[state][action] = self.Q[state][action] * (1 - self.alpha)
+            self.Q[state][action] += reward * self.alpha
         return
 
 
@@ -205,7 +214,7 @@ def run():
     #   learning   - set to True to force the driving agent to use Q-learning
     #    * epsilon - continuous value for the exploration factor, default is 1
     #    * alpha   - continuous value for the learning rate, default is 0.5
-    agent = env.create_agent(LearningAgent, learning=True, alpha=.5)
+    agent = env.create_agent(LearningAgent, learning=True)
     
     ##############
     # Follow the driving agent
@@ -220,14 +229,14 @@ def run():
     #   display      - set to False to disable the GUI if PyGame is enabled
     #   log_metrics  - set to True to log trial and simulation results to /logs
     #   optimized    - set to True to change the default log file name
-    sim = Simulator(env, display=True, log_metrics=True, update_delay=.01, optimized=True)
+    sim = Simulator(env, update_delay=.01, log_metrics=True, optimized=True)
     
     ##############
     # Run the simulator
     # Flags:
     #   tolerance  - epsilon tolerance before beginning testing, default is 0.05 
     #   n_test     - discrete number of testing trials to perform, default is 0
-    sim.run(n_test=10)
+    sim.run(n_test=10, tolerance=0.001)
 
 
 if __name__ == '__main__':
